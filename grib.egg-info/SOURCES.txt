@@ -1,0 +1,9 @@
+LICENSE
+README.md
+pyproject.toml
+grib/__init__.py
+grib/grib.py
+grib.egg-info/PKG-INFO
+grib.egg-info/SOURCES.txt
+grib.egg-info/dependency_links.txt
+grib.egg-info/top_level.txt

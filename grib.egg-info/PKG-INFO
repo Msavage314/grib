@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: grib
+Version: 0.1.0
+Summary: Python library for managing grids
+Author-email: Michael Savage <michaelsavage1707@gmail.com>
+Project-URL: Homepage, https://github.com/yourusername/your-package-name
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
