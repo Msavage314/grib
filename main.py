@@ -13,15 +13,20 @@ with open("instructions.txt") as file:
 
 instructions = list(instructions)
 for inst in instructions:
-    print(inst)
+    # print(inst)
     match inst:
         case ">":
             player.move(RIGHT)
         case "<":
             player.move(LEFT)
-        case "V":
+        case "v":
             player.move(DOWN)
         case "^":
             player.move(UP)
-    print(b)
+    # print(b)
     print(player.position)
+boxes = b.find_objects(grib.Box)
+total = 0
+for i in boxes:
+    total += i[0].position[0] + (i[0].position[1] * 100)
+print(total)

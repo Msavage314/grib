@@ -7,4 +7,5 @@ from .grib import (
     Player,
     Empty,
     OverwriteBehavior,
+    Box,
 )

@@ -1,4 +1,8 @@
-"""Python library for working with grids"""
+"""Python library for working with grids.
+
+Contains functions and classes for working with grid problems,
+like those commonly found in the BIO, advent of code, Project Euler...
+"""
 
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -45,7 +49,7 @@ class Direction(Enum):
         return self.value[index]
 
     def __len__(self):
-        return 2
+        return len(self.value)
 
 
 class ObjectRegistry:
@@ -81,6 +85,9 @@ class BoardObject(ABC):
 
     def __str__(self) -> str:
         return self.display_char
+
+    def __repr__(self) -> str:
+        return f"BoardObject at position {self.position}, display char = {self.display_char}"
 
     @abstractmethod
     def get_valid_moves(self) -> list[Coord]:
@@ -137,7 +144,7 @@ class BoardObject(ABC):
         return False
 
     def can_move_to(
-        self, new_pos, existing: OverwriteBehavior = OverwriteBehavior.FAIL
+        self, new_pos: Coord, existing: OverwriteBehavior = OverwriteBehavior.FAIL
     ) -> bool:
         if not self.board or not self.movable:
             return False
@@ -244,14 +251,16 @@ class BoardObject(ABC):
         return False
 
     @property
-    def position(self) -> Coord | None:
+    def position(self) -> Coord:
         if self.board is None:
-            return None
+            return (-1, -1)
         else:
             for r_index, row in enumerate(self.board.board):
                 for c_index, col in enumerate(row):
                     if col is self:
                         return (c_index, r_index)
+
+        return (-1, 1)
 
 
 class Empty(BoardObject):
