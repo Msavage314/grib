@@ -4,15 +4,24 @@ from os import system
 import time
 
 b = grib.Board(5, 5)
-b.import_board_from_text(open("grid.txt").read())
+with open("grid.txt") as file:
+    b.import_board_from_text(file.read())
 player = b.find_objects(grib.Player)[0][0]
 
-system("cls")
-print(b)
-time.sleep(1)
-player.move(UP)
-system("cls")
-print(b)
-time.sleep(1)
-player.move(UP, grib.OverwriteBehavior.PUSH)
-print(b)
+with open("instructions.txt") as file:
+    instructions = file.read()
+
+instructions = list(instructions)
+for inst in instructions:
+    print(inst)
+    match inst:
+        case ">":
+            player.move(RIGHT)
+        case "<":
+            player.move(LEFT)
+        case "V":
+            player.move(DOWN)
+        case "^":
+            player.move(UP)
+    print(b)
+    print(player.position)

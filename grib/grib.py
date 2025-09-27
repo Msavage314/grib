@@ -2,9 +2,9 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
+import copy
 
-
-type Coord = tuple[int, int]
+type Coord = tuple[int, int] | Direction
 
 
 class OverwriteBehavior(Enum):
@@ -65,10 +65,12 @@ class BoardObject(ABC):
         pushable: bool = False,
     ):
         self.display_char = display_char
-        self.board: Board | None = None
+        # Physical properties
         self.movable: bool = moveable
         self.replaceable: bool = replaceable
         self.pushable: bool = pushable
+
+        self.board: Board | None = None
 
     def __init_subclass__(cls, **kwargs):
         """Automatically register subclasses when they're defined"""
@@ -77,41 +79,95 @@ class BoardObject(ABC):
 
         ObjectRegistry.register(cls)
 
+    def __str__(self) -> str:
+        return self.display_char
+
     @abstractmethod
     def get_valid_moves(self) -> list[Coord]:
         pass
 
     def is_empty(self):
-        if self is Empty:
+        if isinstance(self, Empty):
             return True
         else:
             return False
+
+    def _can_push_chain(self, direction: Direction, chain_length: int = 0) -> bool:
+        """Check if a chain of pushable objects can be pushed in the given direction"""
+        if chain_length > 50:
+            return False
+        if not self.position or not self.board:
+            return False
+
+        target_pos = self.position + direction
+        if not self.board.in_bounds(target_pos):
+            return False
+
+        target_obj = self.board[target_pos]
+
+        if isinstance(target_obj, Empty):
+            return True
+        # continue chain
+        if target_obj.pushable:
+            return target_obj._can_push_chain(direction, chain_length + 1)
+
+        # chain can push through it
+        if target_obj.replaceable:
+            return True
+
+        return False
+
+    def _push_chain(self, direction: Direction):
+        """Actually push the chain of objects"""
+        if not self.position or not self.board:
+            return False
+
+        target_pos = self.position + direction
+        target_obj = self.board[target_pos]
+        if target_obj.pushable:
+            if not target_obj._push_chain(direction):
+                return False
+        # refresh in case box in front has moved
+        target_obj = self.board[target_pos]
+        if isinstance(target_obj, Empty) or target_obj.replaceable:
+            old_pos = self.position
+            self.board[target_pos] = self
+            self.board[old_pos] = Empty()
+            return True
+        return False
 
     def can_move_to(
         self, new_pos, existing: OverwriteBehavior = OverwriteBehavior.FAIL
     ) -> bool:
         if not self.board or not self.movable:
             return False
+
         if not self.board.in_bounds(new_pos):
             return False
-        if self.position is not None:
-            if isinstance(self.board[new_pos], Empty):
-                # swap cells
-                return True
-            else:
-                match existing:
-                    case OverwriteBehavior.FAIL:
-                        return False
-                    case OverwriteBehavior.SWAP:
-                        if self.board[new_pos].movable:
-                            return True
-                    case OverwriteBehavior.REPLACE:
-                        if self.board[new_pos].replaceable:
-                            return True
-                    case OverwriteBehavior.PUSH:
-                        if self.board[new_pos].pushable:
-                            return self.board[new_pos].can_move_to()
-                            return True
+
+        if not self.position:
+            return False
+
+        dx = new_pos[0] - self.position[0]
+        dy = new_pos[1] - self.position[1]
+
+        target_obj = self.board[new_pos]
+
+        if isinstance(target_obj, Empty):
+            return True
+
+        # Handle pushable objects
+        if target_obj.pushable and abs(dx) <= 1 and abs(dy) <= 1:
+            return target_obj._can_push_chain(Direction((dx, dy)))
+
+        match existing:
+            case OverwriteBehavior.FAIL:
+                return False
+            case OverwriteBehavior.SWAP:
+                return target_obj.movable
+            case OverwriteBehavior.REPLACE:
+                return target_obj.replaceable
+
         return False
 
     def move_to(
@@ -140,35 +196,52 @@ class BoardObject(ABC):
 
     def move(
         self,
-        new_pos: Coord | Direction,
+        new_pos: Coord,
         existing: OverwriteBehavior = OverwriteBehavior.FAIL,
-    ) -> None:
+    ) -> bool:
         """attempt to move a square to a new location (relative)"""
-        if self.board is not None and self.position is not None:
-            target = (self.position[0] + new_pos[0], self.position[1] + new_pos[1])
-            if self.can_move_to(target, existing):
-                match existing:
-                    case OverwriteBehavior.REPLACE:
-                        self.board[target] = self
-                        self.board[self.position] = Empty()
-                    case OverwriteBehavior.SWAP:
-                        self.board[target], self.board[self.position] = (
-                            self.board[self.position],
-                            self.board[target],
-                        )
-                    case OverwriteBehavior.FAIL:
-                        self.board[self.position] = Empty()
-                        self.board[target] = self
-                    case OverwriteBehavior.PUSH:
-                        print("trying to push something")
-                        if self.board[target].can_move_to(
-                            target + new_pos, OverwriteBehavior.PUSH
-                        ):
-                            self.board[target] = self
-                            self.board[self.position] = Empty()
+        if not self.board or not self.position:
+            return False
 
-    def __str__(self) -> str:
-        return self.display_char
+        if not self.can_move_to(self.position + new_pos, existing):
+            return False
+
+        direction = Direction(new_pos)
+        new_pos = self.position + new_pos
+        target_obj = self.board[new_pos]
+        # handle pushable objects
+        if target_obj.pushable and direction:
+            if target_obj._can_push_chain(direction):
+                target_obj._push_chain(direction)
+                # Now move to target pos
+                old_pos = self.position
+                self.board[new_pos] = self
+                self.board[old_pos] = Empty()
+                return True
+        if isinstance(target_obj, Empty):
+            old_pos = copy.deepcopy(self.position)
+            self.board[new_pos] = self
+            self.board[old_pos] = Empty()
+            return True
+
+        match existing:
+            case OverwriteBehavior.REPLACE:
+                if target_obj.replaceable:
+                    old_pos = self.position
+                    self.board[new_pos] = self
+                    self.board[old_pos] = Empty()
+                    return True
+            case OverwriteBehavior.SWAP:
+                if target_obj.movable:
+                    # Swap positions
+                    self.board[new_pos], self.board[self.position] = (
+                        self.board[self.position],
+                        self.board[new_pos],
+                    )
+                    # Update positions
+                    return True
+
+        return False
 
     @property
     def position(self) -> Coord | None:
