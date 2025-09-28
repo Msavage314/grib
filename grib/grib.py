@@ -7,6 +7,7 @@ like those commonly found in the BIO, advent of code, Project Euler...
 from abc import ABC, abstractmethod
 from enum import Enum
 import copy
+import math
 
 type Coord = tuple[int, int] | Direction
 
@@ -21,7 +22,7 @@ class OverwriteBehavior(Enum):
 class Direction(Enum):
     """Standard movement directions"""
 
-    NORTH = (0, -1)
+    NORTH = (0, -11)
     SOUTH = (0, 1)
     EAST = (1, 0)
     WEST = (-1, 0)
@@ -262,6 +263,14 @@ class BoardObject(ABC):
 
         return (-1, 1)
 
+    @property
+    def x(self) -> int:
+        return self.position[0]
+
+    @property
+    def y(self) -> int:
+        return self.position[0]
+
 
 class Empty(BoardObject):
     """Represents an empty cell"""
@@ -423,7 +432,54 @@ class Board:
         for i in self.board:
             i.clear()
 
-    def import_board_from_text(self, text: str):
+    def get_row(self, y: int) -> list[BoardObject]:
+        """Get all objects in a row"""
+        if 0 <= y <= self.height:
+            return self.board[y]
+        raise IndexError(f"Row {y} out of bounds")
+
+    def get_column(self, x: int) -> list[BoardObject]:
+        """Get all objects in a column"""
+        if 0 <= x <= self.width:
+            return [self.board[row][x] for row in range(self.height)]
+        raise IndexError(f"Column {x} out of bounds")
+
+    def get_area(self, start_pos: Coord, end_pos: Coord) -> list[list[BoardObject]]:
+        """Return a 2d array of objects in the specified rectangular area"""
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        area = []
+        for y in range(min(y1, y2), max(y1, y2) + 1):
+            row = []
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                if self.in_bounds((x, y)):
+                    row.append(self[x, y])
+                else:
+                    row.append(Empty())
+            area.append(row)
+        return area
+
+    def set_area(self, start_pos: Coord, objects: list[list[BoardObject]]):
+        """Set a rectangular area with a 2D array of objects"""
+        x, y = start_pos
+        for row_offset, row in enumerate(objects):
+            for col_offset, obj in enumerate(row):
+                pos = (x + col_offset, y + row_offset)
+                if self.in_bounds(pos):
+                    self[pos] = obj
+
+    def clear_area(self, start_pos: Coord, end_pos: Coord):
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        for y in range(min(y1, y2), max(y1, y2) + 1):
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                if self.in_bounds((x, y)):
+                    self[x, y] = Empty()
+
+    def save_state(self) -> list[list[str]]:
+        return [[obj.display_char for obj in row] for row in self.board]
+
+    def load_state(self, text: str):
         self.board = []
         lines = text.split("\n")
         for l_index, line in enumerate(lines):
@@ -434,14 +490,60 @@ class Board:
                 to_place.board = self
                 self.board[-1].append(to_place)
 
+    def get_line(
+        self, start_pos: Coord, end_pos: Coord, block_types: list[type] = []
+    ) -> list[BoardObject]:
+        """get all objects in a straight line between two points"""
+        objects = []
+        x1, y1 = start_pos
+        x2, y2 = end_pos
+        # differences
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        sx = 1 if x1 < x2 else -1
+        sy = 1 if y1 < y2 else -1
+
+        err = dx - dy
+        x, y = x1, y1
+
+        while True:
+            if self.in_bounds((x, y)):
+                obj = self[x, y]
+                objects.append(obj)
+                if any(isinstance(obj, block_type) for block_type in block_types):
+                    break
+            else:
+                break
+
+            if x == x2 and y == y2:
+                break
+
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
+        return objects
+
+    @staticmethod
+    def manhattan_distance(pos1: Coord, pos2: Coord) -> int:
+        """Calculate manhattan distance between two positions"""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+    @staticmethod
+    def euclidean_distance(pos1: Coord, pos2: Coord) -> float:
+        return math.sqrt(abs(pos1[0] - pos2[0]) ** 2 + abs(pos1[1] - pos2[1]) ** 2)
+
     @property
     def objects(self, include_empty=False) -> list[BoardObject]:
-        l = []
+        objects = []
         for row in self.board:
             for cell in row:
                 if not isinstance(cell, Empty):
-                    l.append(cell)
-        return l
+                    objects.append(cell)
+        return objects
 
     @property
     def width(self):
