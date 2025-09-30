@@ -5,16 +5,6 @@ import os
 # Add the parent directory to the path to import grib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from grib.grib import (
-    Board,
-    BoardObject,
-    Player,
-    Wall,
-    Empty,
-    Direction,
-    OverwriteBehavior,
-)
-
 
 class TestDirection(unittest.TestCase):
     """Test Direction enum and arithmetic"""

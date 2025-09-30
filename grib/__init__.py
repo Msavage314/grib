@@ -1,11 +1,6 @@
-from .grib import (
+from .core.board import (
     Board,
-    Direction,
     Coord,
-    BoardObject,
-    Wall,
-    Player,
-    Empty,
-    OverwriteBehavior,
-    Box,
 )
+from .core.board_object import BoardObject, Wall, Player, Box, Empty
+from .core.types import Direction, OverwriteBehavior
