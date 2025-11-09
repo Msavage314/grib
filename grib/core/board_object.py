@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from grib.core.types import Coord, Direction, OverwriteBehavior
 from grib.core.shape import Shape
-from grib.util import depreciated
 
 if TYPE_CHECKING:
     from .board import Board
@@ -35,6 +34,7 @@ class BoardObject(ABC):
         self.pushable: bool = pushable
 
         self.board: Board | None = None
+        self.position: Coord = (-1, -1)
 
     def __init_subclass__(cls, **kwargs):
         """Automatically register subclasses when they're defined"""
@@ -44,7 +44,12 @@ class BoardObject(ABC):
         ObjectRegistry.register(cls)
 
     def __str__(self) -> str:
-        return self.display_char
+        text = ""
+        for y, row in enumerate(self.shape.pattern):
+            for x, obj in enumerate(row):
+                text += obj + " "
+            text += "\n"
+        return text
 
     def __repr__(self) -> str:
         return f"BoardObject at position {self.position}, display char = {self.display_char}"
@@ -175,22 +180,27 @@ class BoardObject(ABC):
             return False
 
         direction = Direction(new_pos)
-        new_pos = self.position + new_pos
-        target_obj = self.board[new_pos]
-        # handle pushable objects
-        # if target_obj.pushable and direction:
-        #    if target_obj._can_push_chain(direction):
-        #        target_obj._push_chain(direction)
-        #        # Now move to target pos
-        #        old_pos = self.position
-        #        self.board[new_pos] = self
-        #        self.board[old_pos] = Empty()
-        #        return True
-        if isinstance(target_obj, Empty):
-            old_pos = copy.deepcopy(self.position)
-            self.board[new_pos] = self
-            self.board[old_pos] = Empty()
-            return True
+        new_positions = [i + direction for i in self.get_occupied_positions()]
+        free = []
+        for pos in new_positions:
+            if (self.board[pos] is self) or (self.board[pos].is_empty()):
+                free.append(True)
+            else:
+                free.append(False)
+        if all(free):
+            # First, clear all old positions
+            for pos in self.get_occupied_positions():
+                old_pos = self.position + pos
+
+                self.board[old_pos] = Empty()
+
+            # Update the position
+            self.position += direction
+
+            # Then, set all new positions
+            for pos in self.get_occupied_positions():
+                new_pos = self.position + pos
+                self.board[new_pos] = self
 
         match existing:
             case OverwriteBehavior.REPLACE:
@@ -212,18 +222,6 @@ class BoardObject(ABC):
         return False
 
     @property
-    def position(self) -> Coord:
-        if self.board is None:
-            return (-1, -1)
-        else:
-            for r_index, row in enumerate(self.board.board):
-                for c_index, col in enumerate(row):
-                    if col is self:
-                        return (c_index, r_index)
-
-        return (-1, 1)
-
-    @property
     def x(self) -> int:
         return self.position[0]
 
@@ -235,12 +233,16 @@ class BoardObject(ABC):
     def display_char(self) -> str:
         return self.shape.pattern[0][0]
 
+    @property
+    def is_single_celled(self) -> bool:
+        return self.shape.width == 1 and self.shape.height == 1
+
 
 class Empty(BoardObject):
     """Represents an empty cell"""
 
     def __init__(self):
-        super().__init__(shape=".", moveable=False, replaceable=True)
+        super().__init__(shape="[]", moveable=False, replaceable=True)
 
     def get_valid_moves(self) -> list[Coord]:
         return []
@@ -251,6 +253,16 @@ class Wall(BoardObject):
 
     def __init__(self):
         super().__init__(shape="#", moveable=False)
+
+    def get_valid_moves(self) -> list[Coord]:
+        return []
+
+
+class Symbol(BoardObject):
+    """Represents a random symbol"""
+
+    def __init__(self, char: str = "C"):
+        super().__init__(shape=char, moveable=False)
 
     def get_valid_moves(self) -> list[Coord]:
         return []
@@ -289,9 +301,9 @@ class Box(BoardObject):
 class BigBox(BoardObject):
     def __init__(self):
         shape = [
-            ["~", "~", "~"],
-            ["~", "~", "~"],
-            ["~", "~", "~"],
+            ["+", "-", "+"],
+            ["|", " ", "|"],
+            ["+", "-", "+"],
         ]
         super().__init__(shape=Shape(shape))
 

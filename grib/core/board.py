@@ -5,9 +5,10 @@ like those commonly found in the BIO, advent of code, Project Euler...
 """
 
 import math
-
-from .board_object import BoardObject, ObjectRegistry, Empty, Box
+from .board_object import BoardObject, ObjectRegistry, Empty, Box, Symbol
 from .types import Coord
+from .region import Region
+from grib.util.colors import Color
 
 
 class Board:
@@ -24,8 +25,33 @@ class Board:
         ]
         self.width = width
         self.height = height
+        self.regions: dict[str, Region] = {}
 
-    def __str__(self) -> str:
+    def __str__(self, show_regions=True) -> str:
+        string_board: list[list[str]] = []
+        for y, row in enumerate(self.board):
+            string_board.append([])
+            for x, obj in enumerate(row):
+                region = self.get_region_at((x, y))
+                if obj.is_single_celled:
+                    if region and show_regions:
+                        string_board[-1].append(
+                            region[0].color.value + obj.display_char + Color.END.value
+                        )
+                    else:
+                        string_board[-1].append(obj.display_char)
+
+                    continue
+                if isinstance(obj, Empty):
+                    string_board[-1].append(".")
+
+                else:
+                    rel = (x - obj.x, y - obj.y)
+
+                    string_board[-1].append(obj.shape.pattern[rel[1]][rel[0]])
+        return "\n".join("".join(i for i in j) for j in string_board)
+
+    def __repr__(self) -> str:
         return "\n".join(" ".join(i.display_char for i in j) for j in self.board)
 
     def __getitem__(self, pos: Coord) -> BoardObject:
@@ -44,7 +70,15 @@ class Board:
                 f"Invalid column {pos[0]}. Value must be between 0 and {self.height}"
             )
 
-    def __setitem__(self, pos: Coord, value: BoardObject) -> None:
+    def __setitem__(self, pos: Coord, value: str | BoardObject) -> None:
+        if isinstance(value, str):
+            value = Symbol(value)
+
+        if not value.is_single_celled:
+            print(
+                "do not use direct assignment for multi-celled objects. Please use place_object instead"
+            )
+            return
         try:
             self.board[pos[1]]
         except IndexError:
@@ -213,10 +247,65 @@ class Board:
         positions = obj.shape.get_occupied_positions(pos)
         if not all(self.in_bounds(pos) for pos in positions):
             return
-        for pos in positions:
-            self[pos + obj.position] = Box(
-                display_char=obj.shape.pattern[pos[0]][pos[1]]
-            )
+
+        for p in positions:
+            if not isinstance(self[p + obj.position], Empty):
+                return False
+
+        for p in positions:
+            self[p + obj.position] = obj
+        obj.board = self
+        obj.position = pos
+
+    def find_regions(self):
+        """Returns a list of all connected regions that share a value"""
+        rows, cols = self.height, self.width
+        visited = [[False] * cols for _ in range(rows)]
+        regions = []
+
+        def dfs(r: int, c: int, value, region):
+            if r < 0 or r >= rows or c < 0 or c >= cols or visited[r][c]:
+                return
+            if self.board[r][c].display_char != value:
+                return
+
+            visited[r][c] = True
+            region.append((c, r))
+
+            dfs(r - 1, c, value, region)
+            dfs(r + 1, c, value, region)
+            dfs(r, c - 1, value, region)
+            dfs(r, c + 1, value, region)
+
+        for r in range(rows):
+            for c in range(cols):
+                if not visited[r][c]:
+                    region = []
+                    dfs(r, c, self.board[r][c].display_char, region)
+                    regions.append(region)
+
+        return regions
+
+    def add_region(self, name, color):
+        """
+        Adds a region to the board
+        Returns: region
+        """
+        region = Region(name, color=color)
+        region.board = self
+        self.regions[name] = region
+        return region
+
+    def get_region(self, name) -> Region | None:
+        """Get a region by name"""
+        return self.regions.get(name)
+
+    def get_region_at(self, pos: Coord) -> list[Region] | None:
+        return [region for region in self.regions.values() if pos in region]
+
+    def remove_region(self, name: str):
+        if name in self.regions:
+            del self.regions[name]
 
     @staticmethod
     def manhattan_distance(pos1: Coord, pos2: Coord) -> int:

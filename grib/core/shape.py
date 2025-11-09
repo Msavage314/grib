@@ -24,7 +24,7 @@ class Shape:
 
         self.pattern = pattern
         self.height = len(pattern)
-        self.width = len(pattern)
+        self.width = len(pattern[0])
 
         # Validate rectangular shape
         if not all(len(row) == self.width for row in pattern):
@@ -39,6 +39,6 @@ class Shape:
 
     def get_char_at_offset(self, dx: int, dy: int) -> str:
         """Get the display character at a specific location"""
-        if 0 <= dy < self.height and 0 <= dx < self.height:
+        if 0 <= dy < self.height and 0 <= dx < self.width:
             return self.pattern[dy][dx]
         raise IndexError(f"Offset ({dx},{dy}) is out of bounds!")
