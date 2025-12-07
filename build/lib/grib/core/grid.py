@@ -1,4 +1,7 @@
 from typing import Callable
+from .gameobject import GameObject
+
+type Coord = tuple[int, int]
 
 
 def is_rectangular(matrix: list[list]) -> bool:
@@ -8,19 +11,30 @@ def is_rectangular(matrix: list[list]) -> bool:
     return True
 
 
-class Grid:
-    def __init__(self, width: int, height: int):
-        self._grid = [["." for _ in range(width)] for __ in range(height)]
+class Grid[T]:
+    """
+    Represents a grid that can hold any type of value.
+    Simple mode: Grid[str] can hold characters or numbers
+    Complex mode: Grid[GameObject] can hold interactive objects
+    """
+
+    def __init__(self, width: int, height: int, default: T | str = "."):
+        self._grid: list[list[T | str]] = [
+            [default for _ in range(width)] for __ in range(height)
+        ]
         self.width = width
         self.height = height
         self.dimensions = (width, height)
+
+        self._track_objects = False
+        self._objects: list[GameObject] = []
 
     def __str__(self):
         return "\n".join(" ".join(str(i) for i in j) for j in self._grid)
 
     def __getitem__(
         self, position: tuple[int, int] | tuple[slice, slice]
-    ) -> str | Grid:
+    ) -> Grid | T | None:
         """
         Traditional 2d array access: grid[row,col]
         slicing can be used to extract subgrids
@@ -37,7 +51,7 @@ class Grid:
 
         return self._grid[row][col]
 
-    def __setitem__(self, position: tuple[int | slice, int | slice], value: str | Grid):
+    def __setitem__(self, position: tuple[int | slice, int | slice], value: T | Grid):
         """
         Traditional 2d array access: grid[row,col]
 
@@ -51,17 +65,101 @@ class Grid:
         """
         row, col = position
         if isinstance(row, int) and isinstance(col, int):
-            if isinstance(value, Grid):
-                raise TypeError(
-                    "Cannot assign Grid to single cell. Use grid[r:r+h, c:c+w] = subgrid"
-                )
             self.check_bounds((row, col))
+            old_value = self[row, col]
+            if isinstance(old_value, GameObject):
+                if self._track_objects and hasattr(old_value, "on_remove"):
+                    old_value.on_remove(self, row, col)
+                    if old_value in self._objects:
+                        self._objects.remove(old_value)
+            if isinstance(value, Grid):
+                raise TypeError("Cannot assign a Grid to a single cell")
+            if isinstance(value, GameObject):
+                value.position = position
             self._grid[row][col] = value
             return
         if isinstance(row, slice) or isinstance(col, slice):
             self._set_slice(row, col, value)
             return
         raise TypeError(f"Invalid index types: row={type(row)}, col={type(col)}")
+
+    def move_object(self, obj: T, position: Coord) -> bool:
+        """
+        Move an object from its current position to a new one.
+        Returns True if successful.
+        """
+        new_row, new_col = position
+        if not self._track_objects:
+            raise RuntimeError(
+                "Object tracking not enabled. Call enable_object_tracking()"
+            )
+
+        if isinstance(obj, GameObject):
+            if not hasattr(obj, "position"):
+                raise TypeError("Object must have position attribute")
+
+            old_row, old_col = obj.position
+
+            # Check bounds
+            if not self.in_bounds((new_row, new_col)):
+                return False
+
+            # Check if target is empty or has collision logic
+            target = self._grid[new_row][new_col]
+            if target is not None and target is not obj:
+                # Allow custom collision handling
+                if hasattr(obj, "can_move_to"):
+                    if not obj.can_move_to((new_row, new_col)):
+                        return False
+                else:
+                    return False  # Blocked by default
+
+            # Perform move
+            self._grid[old_row][old_col] = None
+            self._grid[new_row][new_col] = obj
+
+            # Update object position
+            if hasattr(obj, "on_place"):
+                obj.on_place(self, new_row, new_col)
+
+            return True
+        return False
+
+    def find_objects(self, obj_type: type) -> list[tuple[T, Coord]]:
+        """
+        Find all objects of a specific type
+        also returns their coordinates
+        """
+        results = []
+        for row in range(self.height):
+            for col in range(self.width):
+                obj = self._grid[row][col]
+                if isinstance(obj, obj_type):
+                    results.append((obj, (row, col)))
+        return results
+
+    def get_objects(self) -> list[T]:
+        """Get all tracked objects"""
+        objects = []
+        for row in self._grid:
+            for cell in row:
+                if cell is not None:
+                    objects.append(cell)
+        return objects
+
+    def enable_object_tracking(self):
+        """Enable features for game objects"""
+        self._track_objects = True
+
+    def update_objects(self):
+        """Call update() on all objects that have it"""
+        if not self._track_objects:
+            return
+
+        # Copy list to allow objects to modify _objects during update
+        for obj in self._objects.copy():
+            if hasattr(obj, "update"):
+                obj.update(self)
 
     def row(self, index):
         return self._grid[index]
@@ -151,13 +249,13 @@ class Grid:
         if isinstance(row, slice):
             row_range = range(*row.indices(self.height))
         else:
-            self._check_bounds(row, 0)
+            self.check_bounds(row, 0)
             row_range = range(row, row + 1)
 
         if isinstance(col, slice):
             col_range = range(*col.indices(self.width))
         else:
-            self._check_bounds(0, col)
+            self.check_bounds(0, col)
             col_range = range(col, col + 1)
 
         # Extract data
@@ -173,7 +271,7 @@ class Grid:
         new_grid._grid = data
         return new_grid
 
-    def _set_slice(self, row: int | slice, col: int | slice, value: str) -> Grid:
+    def _set_slice(self, row: int | slice, col: int | slice, value: T | Grid):
         """Sets a slice from either  Grid or a fill value"""
         # Convert to ranges
         if isinstance(row, slice):
@@ -209,7 +307,7 @@ class Grid:
         new_grid._grid = [row.copy() for row in self._grid]
         return new_grid
 
-    def rect(self, row: int, col: int, height: int, width: int) -> str | Grid:
+    def rect(self, row: int, col: int, height: int, width: int) -> Grid | T | None:
         """Extract rectangular region as new Grid"""
         return self[row : row + height, col : col + width]
 
