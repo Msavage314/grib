@@ -159,14 +159,16 @@ class Grid[T]:
     def line(self, p1: Coord, p2: Coord) -> Generator[Coord]:
         """yield list of coordinates between the two points"""
         # only works for horizontal/vertical lines for now
-        drow = p1[0] - p2[0]
-        dcol = p1[1] - p2[1]
-        if drow == 0:
-            for i in range(dcol):
-                yield (p1[0], p2[1] + i)
-        elif dcol == 0:
-            for i in range(drow):
-                yield (p2[0] + i, p1[1])
+        drow = p2[0] - p1[0]
+        dcol = p2[1] - p1[1]
+        if drow == 0:  # Horizontal line
+            step = 1 if dcol > 0 else -1
+            for i in range(0, dcol + step, step):
+                yield (p1[0], p1[1] + i)
+        elif dcol == 0:  # Vertical line
+            step = 1 if drow > 0 else -1
+            for i in range(0, drow + step, step):
+                yield (p1[0] + i, p1[1])
 
     def update_objects(self):
         """Call update() on all objects that have it"""
