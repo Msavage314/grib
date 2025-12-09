@@ -163,10 +163,10 @@ class Grid[T]:
         dcol = p1[1] - p2[1]
         if drow == 0:
             for i in range(dcol):
-                yield (p1[0], p1[1] + i)
+                yield (p1[0], p2[1] + i)
         elif dcol == 0:
             for i in range(drow):
-                yield (p1[0] + i, p1[1])
+                yield (p2[0] + i, p1[1])
 
     def update_objects(self):
         """Call update() on all objects that have it"""
