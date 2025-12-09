@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Generator
 from .gameobject import GameObject
 
 type Coord = tuple[int, int]
@@ -155,6 +155,18 @@ class Grid[T]:
     def enable_object_tracking(self):
         """Enable features for game objects"""
         self._track_objects = True
+
+    def line(self, p1: Coord, p2: Coord) -> Generator[Coord]:
+        """yield list of coordinates between the two points"""
+        # only works for horizontal/vertical lines for now
+        drow = p1[0] - p2[0]
+        dcol = p1[1] - p2[1]
+        if drow == 0:
+            for i in range(dcol):
+                yield (p1[0], p1[1] + i)
+        elif dcol == 0:
+            for i in range(drow):
+                yield (p1[0] + i, p1[1])
 
     def update_objects(self):
         """Call update() on all objects that have it"""

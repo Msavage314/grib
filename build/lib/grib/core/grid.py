@@ -125,17 +125,22 @@ class Grid[T]:
             return True
         return False
 
-    def find_objects(self, obj_type: type) -> list[tuple[T, Coord]]:
+    def find_objects(self, obj_type: type | str) -> list[tuple[T, Coord]]:
         """
         Find all objects of a specific type
+        If they are not grid objects, you can search by string
         also returns their coordinates
         """
         results = []
         for row in range(self.height):
             for col in range(self.width):
                 obj = self._grid[row][col]
-                if isinstance(obj, obj_type):
-                    results.append((obj, (row, col)))
+                if isinstance(obj_type, type):
+                    if isinstance(obj, obj_type):
+                        results.append((obj, (row, col)))
+                else:
+                    if obj == obj_type:
+                        results.append((obj, (row, col)))
         return results
 
     def get_objects(self) -> list[T]:
