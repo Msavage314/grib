@@ -15,7 +15,7 @@ class GameObject:
     _col: int = -1
 
     movable: bool = True
-    solid: bool = True
+    solid: bool = False
 
     @property
     def position(self) -> Coord:

@@ -22,12 +22,16 @@ class Grid[T]:
         self._grid: list[list[T | str]] = [
             [default for _ in range(width)] for __ in range(height)
         ]
+        self.default = default
         self.width = width
         self.height = height
         self.dimensions = (width, height)
 
         self._track_objects = False
         self._objects: list[GameObject] = []
+
+        if type(T) != str:
+            self.enable_object_tracking()
 
     def __str__(self):
         return "\n".join(" ".join(str(i) for i in j) for j in self._grid)
@@ -76,6 +80,7 @@ class Grid[T]:
                 raise TypeError("Cannot assign a Grid to a single cell")
             if isinstance(value, GameObject):
                 value.position = position
+                value._grid = self
             self._grid[row][col] = value
             return
         if isinstance(row, slice) or isinstance(col, slice):
@@ -115,7 +120,7 @@ class Grid[T]:
                     return False  # Blocked by default
 
             # Perform move
-            self._grid[old_row][old_col] = None
+            self._grid[old_row][old_col] = self.default
             self._grid[new_row][new_col] = obj
 
             # Update object position
