@@ -32,3 +32,5 @@ print(p.position)
 p.move_up()
 print()
 print(Board)
+
+print("hi")
