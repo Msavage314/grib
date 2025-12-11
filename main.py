@@ -25,10 +25,5 @@ class Player(GameObject):
 
 p = Player()
 Board[5, 5] = p
-print(Board)
-print(p.position)
-p.move_up()
-print(p.position)
-p.move_up()
-print()
-print(Board)
+
+# simple movement
