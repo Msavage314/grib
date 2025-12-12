@@ -1,5 +1,9 @@
-from typing import Callable
+from typing import Callable, Generator
 from .gameobject import GameObject
+from collections import deque
+from typing import Callable
+import heapq
+import math
 
 type Coord = tuple[int, int]
 
@@ -22,12 +26,16 @@ class Grid[T]:
         self._grid: list[list[T | str]] = [
             [default for _ in range(width)] for __ in range(height)
         ]
+        self.default = default
         self.width = width
         self.height = height
         self.dimensions = (width, height)
 
         self._track_objects = False
         self._objects: list[GameObject] = []
+
+        if type(T) is not str:
+            self.enable_object_tracking()
 
     def __str__(self):
         return "\n".join(" ".join(str(i) for i in j) for j in self._grid)
@@ -76,6 +84,7 @@ class Grid[T]:
                 raise TypeError("Cannot assign a Grid to a single cell")
             if isinstance(value, GameObject):
                 value.position = position
+                value._grid = self
             self._grid[row][col] = value
             return
         if isinstance(row, slice) or isinstance(col, slice):
@@ -115,7 +124,7 @@ class Grid[T]:
                     return False  # Blocked by default
 
             # Perform move
-            self._grid[old_row][old_col] = None
+            self._grid[old_row][old_col] = self.default
             self._grid[new_row][new_col] = obj
 
             # Update object position
@@ -155,6 +164,20 @@ class Grid[T]:
     def enable_object_tracking(self):
         """Enable features for game objects"""
         self._track_objects = True
+
+    def line(self, p1: Coord, p2: Coord) -> Generator[Coord]:
+        """yield list of coordinates between the two points"""
+        # only works for horizontal/vertical lines for now
+        drow = p2[0] - p1[0]
+        dcol = p2[1] - p1[1]
+        if drow == 0:  # Horizontal line
+            step = 1 if dcol > 0 else -1
+            for i in range(0, dcol + step, step):
+                yield (p1[0], p1[1] + i)
+        elif dcol == 0:  # Vertical line
+            step = 1 if drow > 0 else -1
+            for i in range(0, drow + step, step):
+                yield (p1[0] + i, p1[1])
 
     def update_objects(self):
         """Call update() on all objects that have it"""
@@ -319,6 +342,107 @@ class Grid[T]:
     def paste(self, other: Grid, at_row: int, at_col: int):
         """Paste another grid at specified position"""
         self[at_row : at_row + other.height, at_col : at_col + other.width] = other
+
+    def pathfind(
+        self,
+        start: Coord,
+        end: Coord,
+        cost_fn: Callable[[Coord, Coord, Coord], float] | None = None,
+        heuristic: Callable[[Coord, Coord], float] | None = None,
+        walls: list[type] | None = None,
+        walkable: list[type] | None = None,
+        diagonal: bool = False,
+    ) -> tuple[list[Coord], float | int] | None:
+        """
+        Pathfind from start to end using the A* algorithm
+        It is highly customisable
+        Args:
+            start: Starting position
+            goal: Goal position
+            cost_fn: Function(current, neighbor, goal) -> cost. Can be used to set higher costs for certain actions
+            heuristic: Function(pos, goal) -> estimated cost (default: Manhattan or Euclidean)
+            walls: List of object types that block movement (e.g., [Wall, Box])
+            walkable: List of object types that allow movement through (e.g., [Empty, Player])
+            diagonal: Allow diagonal movement (default: False)
+        """
+        if walkable is not None:
+            can_traverse = lambda obj: any(isinstance(obj, t) for t in walkable)
+        elif walls is not None:
+            can_traverse = lambda obj: not any(isinstance(obj, t) for t in walls)
+        else:
+            can_traverse = lambda obj: True
+
+        if diagonal:
+            directions = [
+                (0, 1),
+                (0, -1),
+                (1, 0),
+                (-1, 0),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ]
+        else:
+            directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+
+        def get_neighbors(pos):
+            return [
+                (pos[0] + dx, pos[1] + dy)
+                for dx, dy in directions
+                if self.in_bounds((pos[0] + dx, pos[1] + dy))
+            ]
+
+        if cost_fn is None:
+
+            def cost_fn(current, neighbor, goal):
+                return 1.0
+
+        if heuristic is None:
+            # Use Euclidean distance for diagonal, Manhattan for cardinal
+            heuristic = self.distance if diagonal else self.manhattan_distance
+
+        counter = 0
+        priority_queue: list[tuple[float, int, tuple[int, int]]] = [(0, counter, start)]
+
+        came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+        g_score: dict[tuple[int, int], float] = {start: 0}
+
+        while priority_queue:
+            _, _, current = heapq.heappop(priority_queue)
+
+            if current == end:
+                # Reconstruct the path
+                path = []
+                total_cost = g_score[current]
+
+                while current is not None:
+                    path.append(current)
+                    current = came_from[current]
+                return (list(reversed(path)), total_cost)
+
+            for neighbor in get_neighbors(current):
+                if not can_traverse(self[neighbor]):
+                    continue
+
+                tentative_g = g_score[current] + cost_fn(current, neighbor, end)
+
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score = tentative_g + heuristic(neighbor, end)
+                    counter += 1
+                    heapq.heappush(priority_queue, (f_score, counter, neighbor))
+        return None
+
+    @staticmethod
+    def distance(p1: Coord, p2: Coord):
+        """Return euclidean distance"""
+        return math.dist(p1, p2)
+
+    @staticmethod
+    def manhattan_distance(p1: Coord, p2: Coord):
+        return abs(p1[0] - p2[0]) + abs(p2[1] - p1[1])
 
     @staticmethod
     def from_matrix(matrix: list[list]) -> Grid:
